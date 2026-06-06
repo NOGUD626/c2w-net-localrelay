@@ -179,24 +179,22 @@ RUN apk add --no-cache \
 - **node のバージョン**: `serve.mjs` は ESM なので Node.js >= v18 が要る。nvm デフォルトが古い場合は
   `nvm use 23` 等の事前設定が必要。
 
-## VPS で公開する場合 (絶対やってはいけないこと + 改修方針)
+## VPS で公開する / 複数接続 / 外部 API 連携
 
-`run.sh` の構成をそのまま VPS に置くと **致命的に危険**。c2w-net の NAT 設定に
-`192.168.127.254 → 127.0.0.1` が入っているので、ブラウザのユーザーが **VPS の localhost**
-(Docker daemon、Redis、内部 API、Grafana 等)に丸ごとアクセスできてしまう。
+ローカル PoC を超えて以下のような展開を考える場合、設計メモを [`doc/`](doc/) 配下に整理してある:
 
-最低限の改修ポイント:
+- **[doc/multi-tenant-architecture.md](doc/multi-tenant-architecture.md)** — 複数接続を捌くアーキ (Caddy/nginx + broker + c2w-net pool)、broker の Go 実装スケッチ、c2w-net 改修パッチ
+- **[doc/vps-deployment.md](doc/vps-deployment.md)** — VPS スペック実測 + 収容力試算 (2GB → 15〜20 人、4GB → 50 人)、必須改修チェックリスト、推奨プロバイダ
+- **[doc/external-api-access.md](doc/external-api-access.md)** — ブラウザ Linux から Notion / GitHub / OpenAI / Claude API を叩く具体例、できないこと (Web UI ブラウズ等)、認証情報の扱い
 
-| 対策 | 修正箇所 |
-|---|---|
-| ✅ NAT から `127.0.0.1` を削除 | c2w-net main.go の `NAT` を `map[string]string{}` に |
-| ✅ TLS 終端 (wss://) | Caddy / nginx 前段、もしくは `--enable-tls` |
-| ✅ 認証 (basic / OAuth / Cloudflare Access) | 前段の Caddy / nginx で WS upgrade 前にチェック |
-| ✅ ユーザーごとに subnet 分離 | broker (自前 Go) が接続ごとに別 `--subnet` で c2w-net を spawn |
-| ✅ rate limit / 同時接続数制限 | 前段リバプロ + broker のスロットプール |
-| ✅ abuse 対策 (接続先 allowlist) | `Forwards` で許可先のみ通過 (c2w-net 改修) |
+⚠️ **`run.sh` の構成をそのまま VPS に置くと致命的に危険**。最低限知っておくべき問題:
 
-VPS スペック目安: メモリ 2GB で同時 15〜20 人、4GB で 50 人前後 (c2w-net 1 接続 ≒ 21〜60MB RSS)。
+- c2w-net の NAT `192.168.127.254 → 127.0.0.1` で **VPS の localhost が誰でも見える**
+  (Docker daemon、Redis、内部 API、Grafana 等が全部漏れる)
+- 全ユーザーが同じ仮想 L2 セグメントに乗る (互いに ping / TCP 接続できる)
+- VPS の IP から任意 TCP/UDP に出ていく = オープン HTTP/SOCKS プロキシ化、abuse 報告は運営者の責任
+
+VPS で公開する場合は必ず [doc/vps-deployment.md](doc/vps-deployment.md) の「デプロイ前チェックリスト」を確認すること。
 
 ## 参考
 
