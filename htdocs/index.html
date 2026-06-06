@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>コンテナ on WASM 演習</title>
+    <!-- GitHub Pages など COOP/COEP を設定できない環境でも SharedArrayBuffer を有効化する。
+         ローカルの serve.mjs では既にヘッダが付くため二重だが無害。 -->
+    <script src="./coi-serviceworker.js"></script>
+    <link rel="stylesheet" href="./vendor/xterm.css" />
+    <style>
+      /* ===== paiza.io 風 2 ペインレイアウト ===== */
+      :root {
+        --header-bg: #4a90d9;
+        --accent: #4a90d9;
+        --dark: #1f2933;
+        --term-bg: #1e1e1e;
+        --term-bar: #2d2d2d;
+        --text: #2c3e50;
+        --muted: #8895a7;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; height: 100%;
+        font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, system-ui, sans-serif;
+        color: var(--text);
+      }
+      .app { display: flex; flex-direction: column; height: 100vh; }
+
+      /* ヘッダー (青バー + ナビ) */
+      .header {
+        background: var(--header-bg); color: #fff;
+        display: flex; align-items: center; gap: 16px;
+        padding: 12px 20px; flex: none;
+      }
+      .header .brand { font-size: 18px; font-weight: 700; }
+      .header .spacer { flex: 1; }
+      .header button {
+        background: var(--dark); color: #fff; border: none;
+        padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
+        font-family: inherit;
+      }
+      .header button:hover { opacity: .85; }
+      .header button.primary { background: #fff; color: var(--dark); font-weight: 700; }
+
+      /* メイン: 左右 2 ペイン */
+      .main { flex: 1; display: flex; min-height: 0; }
+
+      /* 左ペイン: 演習内容 */
+      .pane-left {
+        width: 46%; min-width: 320px; max-width: 720px;
+        overflow: auto; padding: 28px 32px; background: #fff;
+        border-right: 1px solid #e1e6ec;
+      }
+      .pane-left h1 { font-size: 24px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+      .pane-left .lead { color: #4a5a6a; line-height: 1.8; }
+      .pane-left h2 { font-size: 17px; margin: 28px 0 10px; border-left: 4px solid var(--accent); padding-left: 10px; }
+      .cmd-list { list-style: none; padding: 0; margin: 0; }
+      .cmd-list li {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 14px; margin: 10px 0; border: 1px solid #e1e6ec; border-radius: 8px;
+        background: #f8fafc;
+      }
+      .cmd-main { display: flex; align-items: center; gap: 10px; }
+      .cmd-list code {
+        font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 14px;
+        background: #11161c; color: #7ee787; padding: 5px 11px; border-radius: 5px; white-space: nowrap;
+        overflow-x: auto; flex: none;
+      }
+      .cmd-list .desc { color: #5a6a7a; font-size: 13px; }
+      .cmd-list button {
+        background: var(--accent); color: #fff; border: none; border-radius: 6px;
+        padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap;
+        margin-left: auto; flex: none;
+      }
+      .cmd-list button:hover { opacity: .85; }
+      .cmd-list button:disabled { background: #b8c4d0; cursor: not-allowed; }
+
+      details.accordion {
+        background: var(--dark); color: #fff; border-radius: 8px; margin: 10px 0; overflow: hidden;
+      }
+      details.accordion > summary {
+        list-style: none; cursor: pointer; padding: 13px 16px; font-weight: 600;
+        display: flex; align-items: center; gap: 8px;
+      }
+      details.accordion > summary::-webkit-details-marker { display: none; }
+      details.accordion > summary::before { content: "＋"; color: #9fd0ff; }
+      details.accordion[open] > summary::before { content: "－"; }
+      details.accordion .body { padding: 0 16px 16px; line-height: 1.8; color: #d6dde5; font-size: 14px; }
+      details.accordion .body code { background: #11161c; color: #7ee787; padding: 1px 6px; border-radius: 4px; }
+      .breadcrumb { margin-top: 28px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+      /* 右ペイン: WASM ターミナル */
+      .pane-right { flex: 1; min-width: 0; background: var(--term-bg); display: flex; flex-direction: column; }
+      .term-bar {
+        background: var(--term-bar); color: #c8c8c8; flex: none;
+        padding: 8px 14px; font-size: 12px; display: flex; align-items: center; gap: 8px;
+        font-family: "SFMono-Regular", Menlo, monospace;
+      }
+      .term-bar .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+      .term-bar .red { background: #ff5f56; } .term-bar .yellow { background: #ffbd2e; } .term-bar .green { background: #27c93f; }
+      .term-bar .label { margin-left: 8px; }
+      .term-status { margin-left: auto; color: #ffbd2e; }
+      .term-status.ready { color: #27c93f; }
+      #terminal { flex: 1; min-height: 0; padding: 8px 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ヘッダー -->
+      <div class="header">
+        <span class="brand">🌐 コンテナ on WASM (ネットワーク有効)</span>
+        <div class="spacer"></div>
+        <button>⏮ 前のチャプター</button>
+        <button>次のチャプター ⏭</button>
+        <button class="primary">演習課題へ進む ➜</button>
+      </div>
+
+      <!-- メイン 2 ペイン -->
+      <div class="main">
+        <!-- 左: 演習内容 -->
+        <section class="pane-left">
+          <h1>🚩 PoC: ブラウザの中の Linux から外と通信する</h1>
+          <p class="lead">
+            右のターミナルはブラウザの <b>WebAssembly</b> 上で動いている <b>Alpine Linux (RISC-V)</b> です。
+            さらに、ホスト Mac で常駐させている <code>c2w-net</code> が
+            <b>L2 イーサネットフレームを WebSocket で受けて、ホスト OS の本物 socket() で外に出す</b>
+            ので、コンテナ内から <code>wget</code> / <code>ping</code> / <code>nslookup</code> がそのまま使えます。
+          </p>
+
+          <h2>まずは起動確認</h2>
+          <ul class="cmd-list">
+            <li>
+              <div class="cmd-main">
+                <code>uname -a</code>
+                <button data-cmd="uname -a" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">動いているカーネルを表示 (RISC-V Linux)</span>
+            </li>
+            <li>
+              <div class="cmd-main">
+                <code>ip addr</code>
+                <button data-cmd="ip addr" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">eth0 に 192.168.127.3 が付くはず (c2w-net の DHCP)</span>
+            </li>
+          </ul>
+
+          <h2>ネットを叩いてみよう</h2>
+          <ul class="cmd-list">
+            <li>
+              <div class="cmd-main">
+                <code>cat /etc/resolv.conf</code>
+                <button data-cmd="cat /etc/resolv.conf" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">DHCP で配られた nameserver (= c2w-net ゲートウェイ) を確認</span>
+            </li>
+            <li>
+              <div class="cmd-main">
+                <code>dig google.com</code>
+                <button data-cmd="dig google.com" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">詳細な DNS 情報 (Mac のシステムリゾルバに forward される)</span>
+            </li>
+            <li>
+              <div class="cmd-main">
+                <code>ping -c 3 8.8.8.8</code>
+                <button data-cmd="ping -c 3 8.8.8.8" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">ICMP も gvisor-tap-vsock が終端 → Mac の ping として外へ</span>
+            </li>
+            <li>
+              <div class="cmd-main">
+                <code>curl -sS http://example.com/</code>
+                <button data-cmd="curl -sS http://example.com/" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">HTTP plain text を取得</span>
+            </li>
+            <li>
+              <div class="cmd-main">
+                <code>curl -sS https://api.github.com/zen</code>
+                <button data-cmd="curl -sS https://api.github.com/zen" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">★ HTTPS は CA 入りの curl で証明書検証込みで通る</span>
+            </li>
+          </ul>
+
+          <h2>エディタで遊ぼう</h2>
+          <ul class="cmd-list">
+            <li>
+              <div class="cmd-main">
+                <code>nano --version</code>
+                <button data-cmd="nano --version" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">nano 8.0 が入っている (本体起動は nano /tmp/hello.txt)</span>
+            </li>
+            <li>
+              <div class="cmd-main">
+                <code>apk info | head -20</code>
+                <button data-cmd="apk info | head -20" disabled>▶ 実行</button>
+              </div>
+              <span class="desc">インストール済みパッケージ一覧 (apk は使える状態)</span>
+            </li>
+          </ul>
+
+          <h2>仕組み</h2>
+          <details class="accordion">
+            <summary>なぜブラウザで Linux が動くの？</summary>
+            <div class="body">
+              CPU エミュレータ <code>TinyEMU</code> (RISC-V) を WebAssembly にコンパイルし、その上で
+              Linux カーネルとコンテナの rootfs を起動しています。1 つの <code>out.wasm</code> に
+              エミュレータ・カーネル・rootfs がすべて同梱されています。
+            </div>
+          </details>
+          <details class="accordion">
+            <summary>L2 がブラウザから外に出ていく経路は？</summary>
+            <div class="body">
+              ゲスト Linux の <code>eth0</code> (virtio-net) から出た L2 フレームを TinyEMU が取り出し、
+              <code>ws-delegate.js</code> が <code>ws://localhost:8888</code> へバイナリ送信。
+              ホスト側 <code>c2w-net</code> が <code>gvisor-tap-vsock</code> でユーザー空間 TCP/IP 終端し、
+              Mac の本物 socket() で外部へ抜けます (アドレス: ゲートウェイ 192.168.127.1、ゲスト 192.168.127.3)。
+            </div>
+          </details>
+          <details class="accordion">
+            <summary>ブラウザの Fetch モード (?net=browser) との違いは？</summary>
+            <div class="body">
+              Fetch モードはホスト不要だが <b>HTTP/HTTPS かつ CORS OK なエンドポイントだけ</b>。
+              本 PoC の delegate モードはホスト側 <code>c2w-net</code> が要るが <b>TCP/UDP/ICMP 何でも、CORS 制約なし</b>。
+              <code>ping</code> や <code>ssh</code> も通る。
+            </div>
+          </details>
+
+          <div class="breadcrumb">
+            PoC &gt; container2wasm &gt; c2w-net 中継 &gt; ブラウザ Linux から外へ
+          </div>
+        </section>
+
+        <!-- 右: WASM ターミナル -->
+        <section class="pane-right">
+          <div class="term-bar">
+            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+            <span class="label">container@wasm: ~</span>
+            <span class="term-status" id="term-status">起動中…</span>
+          </div>
+          <div id="terminal"></div>
+        </section>
+      </div>
+    </div>
+
+    <script src="./vendor/xterm.min.js"></script>
+    <script src="./vendor/xterm-pty.js"></script>
+    <script src="./vendor/xterm-addon-fit.js"></script>
+    <script src="./stack.js"></script>
+    <script src="./ws-delegate.js"></script>
+    <script>
+      // ===== xterm.js + xterm-pty 初期化 (公式 wasi-browser デモのロジックを 2 ペイン用に調整) =====
+      const xterm = new Terminal({
+        fontSize: 14,
+        fontFamily: '"SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace',
+        cursorBlink: true,
+        theme: { background: "#1e1e1e", foreground: "#e6e6e6" },
+      });
+
+      // FitAddon でターミナルを右ペインのサイズに追従させる
+      const fitAddon = new FitAddon.FitAddon();
+      xterm.loadAddon(fitAddon);
+      xterm.open(document.getElementById("terminal"));
+      const refit = () => { try { fitAddon.fit(); } catch (e) { /* 初期化前は無視 */ } };
+      refit();
+      window.addEventListener("resize", refit);
+
+      const { master, slave } = openpty();
+
+      // termios 設定 (公式デモと同じ: raw 寄りの端末設定)
+      termios = slave.ioctl("TCGETS");
+      termios.iflag &= ~(ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+      termios.oflag &= ~(OPOST);
+      termios.lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+      slave.ioctl("TCSETS", new Termios(termios.iflag, termios.oflag, termios.cflag, termios.lflag, termios.cc));
+      xterm.loadAddon(master);
+      refit();
+
+      const worker = new Worker("./worker.js" + location.search);
+
+      var nwStack;
+      var netParam = getNetParam();
+      var workerImage = "./out.wasm";
+      if (netParam) {
+        if (netParam.mode == "delegate") {
+          nwStack = delegate(worker, workerImage, netParam.param);
+        } else if (netParam.mode == "browser") {
+          nwStack = newStack(worker, workerImage, new Worker("./stack-worker.js" + location.search), "./c2w-net-proxy.wasm");
+        }
+      }
+      if (!nwStack) {
+        worker.postMessage({ type: "init", imagename: workerImage });
+      }
+      new TtyServer(slave).start(worker, nwStack);
+
+      // シェルが立ち上がる頃合いを見てステータス更新 + コマンドボタンを有効化
+      const statusEl = document.getElementById("term-status");
+      setTimeout(() => {
+        statusEl.textContent = "● 実行中";
+        statusEl.classList.add("ready");
+        document.querySelectorAll(".cmd-list button[data-cmd]").forEach((btn) => {
+          btn.disabled = false;
+          btn.addEventListener("click", () => {
+            // 左ペインのコマンドを右ターミナルの stdin へ流し込む
+            xterm.paste(btn.getAttribute("data-cmd") + "\n");
+            xterm.focus();
+          });
+        });
+      }, 4000);
+
+      function getNetParam() {
+        var vars = location.search.substring(1).split("&");
+        for (var i = 0; i < vars.length; i++) {
+          var kv = vars[i].split("=");
+          if (decodeURIComponent(kv[0]) == "net") {
+            return { mode: kv[1], param: kv[2] };
+          }
+        }
+        // PoC: URL クエリが空でも c2w-net (ws://localhost:8888) に繋ぐ
+        return { mode: "delegate", param: "ws://localhost:8888" };
+      }
+    </script>
+  </body>
+</html>
