@@ -13,6 +13,7 @@
 | [multi-tenant-architecture.md](multi-tenant-architecture.md) | 複数接続を捌くための 3 段アーキテクチャ (Caddy/nginx + broker + c2w-net pool)、broker 実装スケッチ、c2w-net 改修パッチ | VPS 上で複数ユーザーに公開したい人 |
 | [vps-deployment.md](vps-deployment.md) | VPS スペック見積もり (実測ベース)、致命的問題のリスト、必須改修チェックリスト、推奨 VPS プロバイダ | VPS デプロイの責任者 |
 | [external-api-access.md](external-api-access.md) | ブラウザ Linux から Notion / GitHub / OpenAI / Claude API 等を叩く具体例、できないこと、認証情報の扱い注意 | 教育デモを設計する人、API 連携を考える人 |
+| [inbound-port-forwarding.md](inbound-port-forwarding.md) | 逆方向 (ホスト→wasm) 通信 `c2w-net -p host:guest` の仕組み、Docker の `-p` との違い、現構成に入れるときの制約 | inbound (wasm 内サーバを叩く) を検討する人 |
 
 ## 読む順序
 
@@ -40,6 +41,7 @@
 | multi-tenant-architecture.md | 📝 設計提案 | broker 実装は未着手、c2w-net 改修パッチも未適用 |
 | vps-deployment.md | 📝 設計提案 + 一部実測 | メモリ使用量 (idle 21MB) は Mac arm64 で実測済、VPS デプロイは未実施 |
 | external-api-access.md | ✅ 仕様確認済 | `curl https://api.github.com/zen` は PoC で実証済、他 API は理論上同じ経路 |
+| inbound-port-forwarding.md | 📝 仕組み整理 | `c2w-net -p` フラグの存在は確認済、inbound を通す運用検証は未実施 |
 
 ## 次のアクション候補 (もし継続するなら)
 
