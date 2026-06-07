@@ -42,6 +42,9 @@
       }
       .header button:hover { opacity: .85; }
       .header button.primary { background: #fff; color: var(--dark); font-weight: 700; }
+      /* 未実装ボタン: 表示はするが押せない */
+      .header button:disabled { opacity: .4; cursor: not-allowed; }
+      .header button:disabled:hover { opacity: .4; }
 
       /* メイン: 左右 2 ペイン */
       .main { flex: 1; display: flex; min-height: 0; }
@@ -55,26 +58,49 @@
       .pane-left h1 { font-size: 24px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
       .pane-left .lead { color: #4a5a6a; line-height: 1.8; }
       .pane-left h2 { font-size: 17px; margin: 28px 0 10px; border-left: 4px solid var(--accent); padding-left: 10px; }
+      .chapter-head { margin-top: 18px; }
+      .chapter-badge {
+        display: inline-block; background: var(--accent); color: #fff;
+        font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      }
+      #chapter-title { margin-top: 8px; }
+      .chapter-intro { color: #4a5a6a; line-height: 1.8; font-size: 14px; margin: 6px 0 14px; }
+      .cmd-group-title { font-size: 13px; font-weight: 700; color: #34495e; margin: 16px 0 6px; }
       .cmd-list { list-style: none; padding: 0; margin: 0; }
       .cmd-list li {
         display: flex; flex-direction: column; gap: 8px;
         padding: 12px 14px; margin: 10px 0; border: 1px solid #e1e6ec; border-radius: 8px;
         background: #f8fafc;
       }
-      .cmd-main { display: flex; align-items: center; gap: 10px; }
+      .cmd-main { display: flex; align-items: center; gap: 8px; }
+      /* 黒いコードバー: code (可変幅・省略表示) + 右端にコピーアイコンを内包 */
+      .code-wrap {
+        position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center;
+        background: #11161c; border-radius: 5px; padding-right: 38px;
+      }
       .cmd-list code {
-        font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 14px;
-        background: #11161c; color: #7ee787; padding: 5px 11px; border-radius: 5px; white-space: nowrap;
-        overflow-x: auto; flex: none;
+        font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 13.5px;
+        background: transparent; color: #7ee787; padding: 6px 11px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        flex: 1 1 auto; min-width: 0;
       }
       .cmd-list .desc { color: #5a6a7a; font-size: 13px; }
       .cmd-list button {
         background: var(--accent); color: #fff; border: none; border-radius: 6px;
         padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap;
-        margin-left: auto; flex: none;
+        flex: none;
       }
       .cmd-list button:hover { opacity: .85; }
       .cmd-list button:disabled { background: #b8c4d0; cursor: not-allowed; }
+      /* コピーアイコン: 黒バー内の右端に配置した FontAwesome 風アイコンボタン */
+      .cmd-list .copy-btn {
+        position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+        background: transparent; color: #8b98a5; padding: 5px 6px; border-radius: 5px;
+        display: inline-flex; align-items: center; justify-content: center;
+      }
+      .cmd-list .copy-btn:hover { background: #20272f; color: #c8d2dc; opacity: 1; }
+      .cmd-list .copy-btn.copied { background: transparent; color: #27c93f; }
+      .cmd-list .copy-btn svg { display: block; }
 
       details.accordion {
         background: var(--dark); color: #fff; border-radius: 8px; margin: 10px 0; overflow: hidden;
@@ -102,25 +128,100 @@
       .term-bar .label { margin-left: 8px; }
       .term-status { margin-left: auto; color: #ffbd2e; }
       .term-status.ready { color: #27c93f; }
+      .term-status.busy { color: #ffbd2e; }
+      #term-interrupt {
+        margin-left: auto; background: #c0392b; color: #fff; border: none;
+        border-radius: 5px; padding: 3px 10px; font-size: 11px; cursor: pointer;
+        font-family: inherit;
+      }
+      #term-interrupt:hover { background: #e74c3c; }
+      /* 実行中はコマンドボタンを押せなくする */
+      .cmd-list button[data-cmd]:disabled { opacity: 0.45; cursor: not-allowed; }
       #terminal { flex: 1; min-height: 0; padding: 8px 10px; }
+
+      /* 初回ブート用ローディングオーバーレイ (ターミナル上に重ねる) */
+      .pane-right { position: relative; }
+      #boot-overlay {
+        position: absolute; inset: 0; z-index: 10;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 18px; background: rgba(30, 30, 30, 0.96); color: #e6e6e6;
+        font-family: "SFMono-Regular", Menlo, monospace; text-align: center; padding: 24px;
+        transition: opacity 0.4s ease;
+      }
+      #boot-overlay.hidden { opacity: 0; pointer-events: none; }
+      #boot-overlay .boot-logo {
+        width: 132px; height: auto; opacity: 0.95;
+        filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55));
+        animation: boot-float 3.2s ease-in-out infinite;
+      }
+      @keyframes boot-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+      }
+      #boot-overlay .spinner {
+        width: 44px; height: 44px; border-radius: 50%;
+        border: 4px solid rgba(255, 255, 255, 0.15); border-top-color: #27c93f;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      #boot-overlay .boot-title { font-size: 15px; font-weight: 600; }
+      #boot-overlay .boot-msg { font-size: 13px; color: #9aa0a6; max-width: 32em; line-height: 1.6; }
+      #boot-overlay .boot-hint { font-size: 11px; color: #6b7178; }
+
+      /* モバイル用タブ: PC では非表示 (狭い画面の @media でのみ表示) */
+      .mtabs { display: none; }
+
+      /* ===== スマホ・狭幅レイアウト (PC 版 = 769px 以上は一切変更しない) ===== */
+      @media (max-width: 768px) {
+        /* ヘッダー: 折り返してボタンを縮める (横はみ出し防止) */
+        .header { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+        .header .brand { font-size: 14px; flex-basis: 100%; }
+        .header .spacer { display: none; }
+        .header button { flex: 1 1 auto; padding: 7px 8px; font-size: 12px; }
+
+        /* タブバー表示 */
+        .mtabs { display: flex; flex: none; background: var(--dark); }
+        .mtabs .mtab {
+          flex: 1; background: transparent; color: #9aa6b2; border: none;
+          padding: 12px 8px; font-size: 14px; font-family: inherit; cursor: pointer;
+          border-bottom: 3px solid transparent;
+        }
+        .mtabs .mtab.active { color: #fff; border-bottom-color: var(--accent); }
+
+        /* 2 ペインを縦積みにし、タブで片方ずつ全画面表示 */
+        .main { flex-direction: column; }
+        .pane-left { width: 100%; max-width: none; min-width: 0; padding: 16px; }
+        .pane-left h1 { font-size: 20px; }
+        .app.show-learn .pane-right { display: none; }
+        .app.show-term  .pane-left { display: none; }
+        .app.show-term  .pane-right { flex: 1; min-height: 0; }
+        /* コマンドカードの「実行」ボタンはタップしやすく */
+        .cmd-list button[data-cmd] { padding: 9px 14px; }
+      }
     </style>
   </head>
   <body>
-    <div class="app">
+    <div class="app show-learn">
       <!-- ヘッダー -->
       <div class="header">
         <span class="brand">🌐 コンテナ on WASM (ネットワーク有効)</span>
         <div class="spacer"></div>
-        <button>⏮ 前のチャプター</button>
-        <button>次のチャプター ⏭</button>
-        <button class="primary">演習課題へ進む ➜</button>
+        <button id="nav-prev">⏮ 前のチャプター</button>
+        <button id="nav-next">次のチャプター ⏭</button>
+        <button class="primary" disabled title="未実装 (準備中)">演習課題へ進む ➜</button>
+      </div>
+
+      <!-- モバイル用タブ (狭い画面のみ表示。PC では CSS で非表示) -->
+      <div class="mtabs" id="mtabs">
+        <button class="mtab active" data-tab="learn">📖 教材</button>
+        <button class="mtab" data-tab="term">💻 ターミナル</button>
       </div>
 
       <!-- メイン 2 ペイン -->
       <div class="main">
         <!-- 左: 演習内容 -->
         <section class="pane-left">
-          <h1>🚩 PoC: ブラウザの中の Linux から外と通信する</h1>
+          <h1>🚩 [導入編] ブラウザの中の Linux から外と通信する</h1>
           <p class="lead">
             右のターミナルはブラウザの <b>WebAssembly</b> 上で動いている <b>Alpine Linux (RISC-V)</b> です。
             さらに、ホスト Mac で常駐させている <code>c2w-net</code> が
@@ -128,107 +229,17 @@
             ので、コンテナ内から <code>wget</code> / <code>ping</code> / <code>nslookup</code> がそのまま使えます。
           </p>
 
-          <h2>まずは起動確認</h2>
-          <ul class="cmd-list">
-            <li>
-              <div class="cmd-main">
-                <code>uname -a</code>
-                <button data-cmd="uname -a" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">動いているカーネルを表示 (RISC-V Linux)</span>
-            </li>
-            <li>
-              <div class="cmd-main">
-                <code>ip addr</code>
-                <button data-cmd="ip addr" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">eth0 に 192.168.127.3 が付くはず (c2w-net の DHCP)</span>
-            </li>
-          </ul>
+          <!-- チャプター (JS が CHAPTERS から描画 / ヘッダーの前後ボタンで切替) -->
+          <div class="chapter-head">
+            <span class="chapter-badge" id="chapter-badge"></span>
+          </div>
+          <h2 id="chapter-title"></h2>
+          <p class="chapter-intro" id="chapter-intro"></p>
+          <div id="chapter-body"></div>
 
-          <h2>ネットを叩いてみよう</h2>
-          <ul class="cmd-list">
-            <li>
-              <div class="cmd-main">
-                <code>cat /etc/resolv.conf</code>
-                <button data-cmd="cat /etc/resolv.conf" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">DHCP で配られた nameserver (= c2w-net ゲートウェイ) を確認</span>
-            </li>
-            <li>
-              <div class="cmd-main">
-                <code>dig google.com</code>
-                <button data-cmd="dig google.com" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">詳細な DNS 情報 (Mac のシステムリゾルバに forward される)</span>
-            </li>
-            <li>
-              <div class="cmd-main">
-                <code>ping -c 3 8.8.8.8</code>
-                <button data-cmd="ping -c 3 8.8.8.8" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">ICMP も gvisor-tap-vsock が終端 → Mac の ping として外へ</span>
-            </li>
-            <li>
-              <div class="cmd-main">
-                <code>curl -sS http://example.com/</code>
-                <button data-cmd="curl -sS http://example.com/" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">HTTP plain text を取得</span>
-            </li>
-            <li>
-              <div class="cmd-main">
-                <code>curl -sS https://api.github.com/zen</code>
-                <button data-cmd="curl -sS https://api.github.com/zen" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">★ HTTPS は CA 入りの curl で証明書検証込みで通る</span>
-            </li>
-          </ul>
-
-          <h2>エディタで遊ぼう</h2>
-          <ul class="cmd-list">
-            <li>
-              <div class="cmd-main">
-                <code>nano --version</code>
-                <button data-cmd="nano --version" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">nano 8.0 が入っている (本体起動は nano /tmp/hello.txt)</span>
-            </li>
-            <li>
-              <div class="cmd-main">
-                <code>apk info | head -20</code>
-                <button data-cmd="apk info | head -20" disabled>▶ 実行</button>
-              </div>
-              <span class="desc">インストール済みパッケージ一覧 (apk は使える状態)</span>
-            </li>
-          </ul>
-
-          <h2>仕組み</h2>
-          <details class="accordion">
-            <summary>なぜブラウザで Linux が動くの？</summary>
-            <div class="body">
-              CPU エミュレータ <code>TinyEMU</code> (RISC-V) を WebAssembly にコンパイルし、その上で
-              Linux カーネルとコンテナの rootfs を起動しています。1 つの <code>out.wasm</code> に
-              エミュレータ・カーネル・rootfs がすべて同梱されています。
-            </div>
-          </details>
-          <details class="accordion">
-            <summary>L2 がブラウザから外に出ていく経路は？</summary>
-            <div class="body">
-              ゲスト Linux の <code>eth0</code> (virtio-net) から出た L2 フレームを TinyEMU が取り出し、
-              <code>ws-delegate.js</code> が <code>ws://localhost:8888</code> へバイナリ送信。
-              ホスト側 <code>c2w-net</code> が <code>gvisor-tap-vsock</code> でユーザー空間 TCP/IP 終端し、
-              Mac の本物 socket() で外部へ抜けます (アドレス: ゲートウェイ 192.168.127.1、ゲスト 192.168.127.3)。
-            </div>
-          </details>
-          <details class="accordion">
-            <summary>ブラウザの Fetch モード (?net=browser) との違いは？</summary>
-            <div class="body">
-              Fetch モードはホスト不要だが <b>HTTP/HTTPS かつ CORS OK なエンドポイントだけ</b>。
-              本 PoC の delegate モードはホスト側 <code>c2w-net</code> が要るが <b>TCP/UDP/ICMP 何でも、CORS 制約なし</b>。
-              <code>ping</code> や <code>ssh</code> も通る。
-            </div>
-          </details>
+          <!-- チャプター連動の詳細解説 (JS が現在章の details を描画) -->
+          <h2 id="chapter-notes-head">📖 このチャプターの解説</h2>
+          <div id="chapter-notes"></div>
 
           <div class="breadcrumb">
             PoC &gt; container2wasm &gt; c2w-net 中継 &gt; ブラウザ Linux から外へ
@@ -240,9 +251,18 @@
           <div class="term-bar">
             <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
             <span class="label">container@wasm: ~</span>
+            <button id="term-interrupt" title="実行中のコマンドを中断 (Ctrl+C)" style="display:none">⏹ 中断 (Ctrl+C)</button>
             <span class="term-status" id="term-status">起動中…</span>
           </div>
           <div id="terminal"></div>
+          <!-- 初回ブート中のローディング表示 (準備完了で自動的に消える) -->
+          <div id="boot-overlay">
+            <img class="boot-logo" src="./assets/server.png" alt="" />
+            <div class="spinner"></div>
+            <div class="boot-title" id="boot-title">ブラウザ内 Linux を準備中…</div>
+            <div class="boot-msg" id="boot-msg">WebAssembly イメージを取得しています (約 26〜42MB)。<br>初回は数十秒かかります。</div>
+            <div class="boot-hint">RISC-V 上で Alpine Linux を起動 → c2w-net 経由で外部ネットへ接続</div>
+          </div>
         </section>
       </div>
     </div>
@@ -297,20 +317,353 @@
       }
       new TtyServer(slave).start(worker, nwStack);
 
-      // シェルが立ち上がる頃合いを見てステータス更新 + コマンドボタンを有効化
+      // ===== 初回ブートの進捗管理 =====
+      // 固定タイマーではなく「実際のターミナル出力 / シェルプロンプト」を検出して
+      // ローディングオーバーレイを消す。イメージ取得→カーネル起動→シェルの3段階。
       const statusEl = document.getElementById("term-status");
-      setTimeout(() => {
+      const overlayEl = document.getElementById("boot-overlay");
+      const bootTitleEl = document.getElementById("boot-title");
+      const bootMsgEl = document.getElementById("boot-msg");
+      const PROMPT_TIMEOUT_MS = 90000; // 保険: 検出に失敗してもこの時間で必ず解除
+      let booted = false;
+      let sawOutput = false;
+
+      // ===== コマンド実行ゲート (本物の端末っぽく1コマンドずつ) =====
+      // dig 等の実行中に次のボタンを受け付けないよう、プロンプトが戻るまでロックする。
+      const interruptBtn = document.getElementById("term-interrupt");
+      let cmdRunning = false;
+      let cmdWatch = null;
+
+      function cmdButtons() {
+        return document.querySelectorAll(".cmd-list button[data-cmd]");
+      }
+      function promptReady() {
+        const buf = xterm.buffer.active;
+        const cur = buf.getLine(buf.baseY + buf.cursorY);
+        return !!(cur && /[#$]\s*$/.test(cur.translateToString(true)));
+      }
+      // コマンドボタンの活殺を現在状態 (起動済み & 非実行中) に同期
+      function refreshButtons() {
+        cmdButtons().forEach((b) => { b.disabled = !booted || cmdRunning; });
+      }
+      function setBusy(busy) {
+        cmdRunning = busy;
+        refreshButtons();
+        interruptBtn.style.display = busy ? "" : "none";
+        statusEl.textContent = busy ? "● 実行中…" : "● 実行中";
+        statusEl.classList.toggle("busy", busy);
+        statusEl.classList.toggle("ready", !busy);
+      }
+      // コマンドを送り、プロンプトが戻るまでロック
+      function runCommand(cmd) {
+        if (cmdRunning || !booted) return;  // 実行中/未起動は無視 (端末同様、勝手に積まない)
+        if (isMobile()) showTab("term");    // スマホ: 実行したら端末タブへ自動切替して結果を見せる
+        xterm.focus();
+        xterm.paste(cmd + "\n");
+        setBusy(true);
+        let elapsed = 0;
+        cmdWatch = setInterval(() => {
+          elapsed += 250;
+          // 送出直後はまだ前行がプロンプトのままなので少し待ってから判定
+          if (elapsed >= 600 && promptReady()) { clearInterval(cmdWatch); setBusy(false); return; }
+          if (elapsed > 180000) { clearInterval(cmdWatch); setBusy(false); }  // 保険
+        }, 250);
+      }
+      // 中断 (Ctrl+C = 0x03 を stdin へ)。終わらないコマンドからの復帰用。
+      function sendInterrupt() {
+        xterm.focus();
+        xterm.paste("\x03");
+      }
+      interruptBtn.addEventListener("click", sendInterrupt);
+
+      // ===== モバイル: 教材 / ターミナル タブ切替 (PC では .mtabs 非表示) =====
+      const appEl = document.querySelector(".app");
+      const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+      function showTab(tab) {
+        const term = tab === "term";
+        appEl.classList.toggle("show-term", term);
+        appEl.classList.toggle("show-learn", !term);
+        document.querySelectorAll(".mtab").forEach((b) =>
+          b.classList.toggle("active", b.dataset.tab === tab)
+        );
+        // 端末タブを開いた瞬間にサイズ追従させ、フォーカスでキーボードを出す
+        if (term) setTimeout(() => { refit(); xterm.focus(); }, 0);
+      }
+      document.getElementById("mtabs").addEventListener("click", (e) => {
+        const b = e.target.closest(".mtab");
+        if (b) showTab(b.dataset.tab);
+      });
+      // 端末エリアのタップで iOS Safari のソフトキーボードを表示
+      document.getElementById("terminal").addEventListener("click", () => xterm.focus());
+      // コマンドをクリップボードへコピー (secure context 前提、失敗時は execCommand で代替)
+      // FontAwesome 風のアイコン (外部依存を避けてインライン SVG で同梱)
+      const COPY_ICON =
+        '<svg viewBox="0 0 448 512" width="14" height="14" fill="currentColor" aria-hidden="true">' +
+        '<path d="M384 96V384H192V96H384zm0-48H192c-26.5 0-48 21.5-48 48V384c0 26.5 21.5 48 48 48H384c26.5 0 48-21.5 48-48V96c0-26.5-21.5-48-48-48zM64 128H32c-17.7 0-32 14.3-32 32V448c0 35.3 28.7 64 64 64H288c17.7 0 32-14.3 32-32V464H96c-17.7 0-32-14.3-32-32V128z"/></svg>';
+      const CHECK_ICON =
+        '<svg viewBox="0 0 448 512" width="14" height="14" fill="currentColor" aria-hidden="true">' +
+        '<path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>';
+
+      async function copyToClipboard(text) {
+        try {
+          if (navigator.clipboard) { await navigator.clipboard.writeText(text); return true; }
+        } catch (e) { /* フォールバックへ */ }
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
+          const ok = document.execCommand("copy"); document.body.removeChild(ta); return ok;
+        } catch (e) { return false; }
+      }
+      // コマンドボタン/コピーボタンはイベント委譲で拾う (チャプター切替で再描画されるため)
+      document.getElementById("chapter-body").addEventListener("click", async (e) => {
+        const copyBtn = e.target.closest("button.copy-btn");
+        if (copyBtn) {
+          const ok = await copyToClipboard(copyBtn.getAttribute("data-copy"));
+          copyBtn.innerHTML = ok ? CHECK_ICON : COPY_ICON;
+          copyBtn.classList.toggle("copied", ok);
+          setTimeout(() => { copyBtn.innerHTML = COPY_ICON; copyBtn.classList.remove("copied"); }, 1200);
+          return;
+        }
+        const btn = e.target.closest("button[data-cmd]");
+        if (btn && !btn.disabled) runCommand(btn.getAttribute("data-cmd"));
+      });
+
+      function markReady() {
+        if (booted) return;
+        booted = true;
+        overlayEl.classList.add("hidden");
         statusEl.textContent = "● 実行中";
         statusEl.classList.add("ready");
-        document.querySelectorAll(".cmd-list button[data-cmd]").forEach((btn) => {
-          btn.disabled = false;
-          btn.addEventListener("click", () => {
-            // 左ペインのコマンドを右ターミナルの stdin へ流し込む
-            xterm.paste(btn.getAttribute("data-cmd") + "\n");
-            xterm.focus();
-          });
-        });
-      }, 4000);
+        refreshButtons();
+      }
+
+      // ===== チャプター (とほほの Linux 入門を参考に、本環境で動作確認済みのコマンドだけ) =====
+      // 各コマンドは実機 (Alpine 3.20 / RISC-V / busybox) でブラウザ経由の動作を確認済み。
+      const CHAPTERS = [
+        {
+          title: "システムを知る",
+          intro: "まずはこの Linux が何者かを確認します。ブラウザの中で RISC-V の Alpine Linux が動いています。",
+          cmds: [
+            ["uname -a", "カーネルとアーキテクチャを表示 (riscv64 Linux)"],
+            ["cat /etc/os-release", "ディストリビューション (Alpine Linux v3.20)"],
+            ["whoami", "今のユーザー (root)"],
+            ["date", "現在時刻 (UTC)"],
+            ["uptime", "起動からの経過時間とロードアベレージ"],
+            ["free", "メモリの使用状況"],
+          ],
+          details: [
+            ["なぜブラウザで Linux が動くの？",
+             "CPU エミュレータ <code>TinyEMU</code> (RISC-V) を WebAssembly にコンパイルし、その上で Linux カーネルとコンテナの rootfs を起動しています。1 つの <code>out.wasm</code> にエミュレータ・カーネル・rootfs がすべて同梱されています。"],
+            ["Alpine Linux と RISC-V",
+             "<code>uname -a</code> の <code>riscv64</code> は 64bit RISC-V を表します。Alpine は <b>musl libc + busybox</b> の軽量ディストリで、サイズが小さいため wasm に載せやすいのが特徴です。"],
+            ["uname / uptime / free の読み方",
+             "<code>uname -a</code> はカーネル名・ホスト名・バージョン・アーキを 1 行で表示。<code>uptime</code> の load average は 1/5/15 分平均の実行待ちタスク数。<code>free</code> は KB 単位のメモリ使用量です。"],
+          ],
+        },
+        {
+          title: "ファイルとディレクトリ",
+          intro: "ファイルシステムを歩いてみます。/tmp は書き込み可能なので、ここで作成・コピー・検索を試します。",
+          cmds: [
+            ["pwd", "今いるディレクトリ"],
+            ["ls -la /", "ルート直下を詳細表示 (権限・サイズ・更新日時)"],
+            ["mkdir -p /tmp/work", "ディレクトリを作成 (-p で親ごと)"],
+            ["touch /tmp/work/hello.txt", "空ファイルを作成"],
+            ["cp /etc/hostname /tmp/work/", "ファイルをコピー"],
+            ["ls -l /tmp/work", "作成・コピー結果を確認"],
+            ["find /etc -name '*.conf' | head", "条件に合うファイルを検索"],
+          ],
+          details: [
+            ["ファイル階層 (FHS)",
+             "<code>/etc</code> は設定、<code>/usr</code> はプログラム、<code>/var</code> は可変データ、<code>/tmp</code> は一時領域。Linux はすべてを 1 本のツリーに配置します (Windows のドライブレターは無い)。"],
+            ["/tmp は書き込み可・再読込で消える",
+             "この環境のファイルシステムは <b>overlay (揮発)</b>。<code>/tmp</code> 等へ自由に書けますが、ブラウザを再読込するとコンテナは作り直され、変更は失われます。"],
+            ["ls -l の見方",
+             "先頭の <code>drwxr-xr-x</code> は「種別 + 所有者/グループ/その他の rwx」。続いてリンク数・所有者・グループ・サイズ・更新日時・名前が並びます (権限の詳細は第4章)。"],
+          ],
+        },
+        {
+          title: "テキストを扱う",
+          intro: "Linux の文化はテキスト処理。リダイレクト・検索・抽出・整形をパイプでつなぎます。",
+          cmds: [
+            ["echo 'hello c2w-net' > /tmp/msg.txt", "リダイレクト (>) でファイルへ書き込み"],
+            ["cat /tmp/msg.txt", "ファイルの中身を表示"],
+            ["wc -l /etc/passwd", "行数を数える"],
+            ["grep root /etc/passwd", "文字列を含む行を検索"],
+            ["head -5 /etc/services", "先頭 5 行だけ表示"],
+            ["cut -d: -f1 /etc/passwd | head", "区切り (:) で 1 列目を抽出"],
+            ["cat /etc/passwd | sort | head", "パイプでソートして先頭表示"],
+          ],
+          details: [
+            ["リダイレクトとパイプ",
+             "<code>&gt;</code> は出力をファイルへ上書き、<code>&gt;&gt;</code> は追記、<code>|</code> (パイプ) は前のコマンドの出力を次のコマンドの入力へ渡します。小さな道具を繋いで使うのが Unix 流。"],
+            ["標準入出力 (stdin/stdout/stderr)",
+             "各コマンドは標準入力から受け取り、標準出力へ書き、エラーは標準エラーへ。<code>cmd | cmd</code> は stdout→stdin の連結、<code>cmd &gt; f</code> は stdout をファイルへ向けます。"],
+            ["テキスト処理コマンド早見",
+             "<code>grep</code>=検索、<code>cut</code>=列抽出、<code>sort</code>=並べ替え、<code>wc</code>=行/語/バイト数、<code>head/tail</code>=先頭/末尾。組み合わせるとログ解析などが一行で書けます。"],
+          ],
+        },
+        {
+          title: "権限とプロセス",
+          intro: "パーミッション (rwx) と実行中プロセス、ディスク使用量を見ます。",
+          cmds: [
+            ["id", "ユーザー ID とグループ"],
+            ["ls -l /etc/passwd", "パーミッション・所有者の表示"],
+            ["touch /tmp/p.txt && chmod 600 /tmp/p.txt && ls -l /tmp/p.txt", "chmod で権限を変更して確認"],
+            ["ps", "実行中のプロセス一覧"],
+            ["df -h /", "ディスクの使用量 (人が読める単位)"],
+            ["du -sh /usr", "ディレクトリの合計サイズ"],
+          ],
+          details: [
+            ["パーミッション rwx と 8 進数",
+             "r=4・w=2・x=1 を所有者/グループ/その他で足します。<code>chmod 600</code>=所有者 rw のみ、<code>644</code>=所有者 rw+他 r、<code>755</code>=所有者 rwx+他 rx。"],
+            ["プロセスと PID",
+             "<code>ps</code> は実行中プロセスを PID 付きで一覧表示。この環境はコンテナなので動くプロセスはごく少数 (シェルと ps 自身くらい) です。"],
+            ["df と du の違い",
+             "<code>df</code> は<b>ファイルシステム単位</b>の空き容量、<code>du</code> は<b>ディレクトリ/ファイル単位</b>の使用量。<code>-h</code> で人が読みやすい単位 (K/M/G) になります。"],
+          ],
+        },
+        {
+          title: "ネットワークを調べる",
+          intro: "ここからが本領。c2w-net 経由で外に出るための足回り (IP・ルート・DNS・到達性) を確認します。",
+          cmds: [
+            ["ip addr", "eth0 に振られた IP (c2w-net の DHCP)"],
+            ["ip route", "デフォルトゲートウェイ (192.168.127.1)"],
+            ["cat /etc/resolv.conf", "参照する DNS サーバ"],
+            ["nslookup google.com", "名前解決 (内蔵 DNS フォワーダ経由)"],
+            ["dig +short github.com", "簡潔な DNS 解決 (bind-tools)"],
+            ["ping -c 3 1.1.1.1", "ICMP 到達性 (gvisor-tap-vsock が終端)"],
+          ],
+          details: [
+            ["この環境のネット構成",
+             "<code>eth0</code> (virtio-net) に c2w-net の DHCP で <code>192.168.127.X</code> が振られ、デフォルトゲートウェイ兼 DNS が <code>192.168.127.1</code>。すべて仮想で、ホスト側のユーザー空間スタックが終端します。"],
+            ["L2 がブラウザから外に出ていく経路は？",
+             "ゲスト Linux の <code>eth0</code> から出た L2 フレームを TinyEMU が取り出し、<code>ws-delegate.js</code> が WebSocket でホストへ送信。ホスト側 <code>c2w-net</code> が <code>gvisor-tap-vsock</code> でユーザー空間 TCP/IP 終端し、本物の socket() で外部へ抜けます。"],
+            ["DNS 解決の流れ",
+             "<code>nslookup</code>/<code>dig</code> の問い合わせは <code>192.168.127.1</code> の内蔵フォワーダへ。そこからホスト OS のシステムリゾルバへ転送されるので、VPN や社内 DNS も透過します。"],
+          ],
+        },
+        {
+          title: "外部と通信する",
+          intro: "ブラウザの中の Linux から、本物の socket() でインターネットへ。HTTPS は証明書検証込みで通ります。",
+          cmds: [
+            ["curl -sS http://example.com/", "HTTP プレーンテキストを取得"],
+            ["curl -sS https://api.github.com/zen", "★ HTTPS (CA 検証込み) で GitHub API"],
+            ["curl -sS https://httpbin.org/ip", "自分の出口 IP を確認 (ホストの公開 IP)"],
+            ["wget -qO- https://api.github.com/zen", "wget でも HTTPS 取得"],
+            ["apk add jq", "パッケージ導入 (Alpine リポジトリへ HTTPS)"],
+            ["curl -sS https://api.github.com/ | jq 'keys' | head", "API レスポンスを jq で整形 (要 apk add jq)"],
+          ],
+          details: [
+            ["なぜ HTTPS が証明書検証込みで通るのか",
+             "c2w-net は <b>L4 (TCP) をパススルー</b>するだけで TLS は終端しません。コンテナ内の curl がエンドツーエンドで TLS handshake し、<code>/etc/ssl/certs</code> の CA バンドルでサーバ証明書を検証します。MITM の懸念なし・CORS 制約なし。"],
+            ["apk add がネット必須な理由",
+             "<code>apk add</code> は Alpine の公式リポジトリ (dl-cdn.alpinelinux.org) へ HTTPS でアクセスし、APKINDEX とパッケージを取得します。つまりこの一手だけで「コンテナが外と通信できている」証明にもなります。"],
+            ["ブラウザの Fetch モード (?net=browser) との違いは？",
+             "Fetch モードはホスト不要だが <b>HTTP/HTTPS かつ CORS OK なエンドポイントだけ</b>。本構成の delegate モードはホスト側 <code>c2w-net</code> が要るが <b>TCP/UDP/ICMP 何でも、CORS 制約なし</b>。<code>ping</code> や <code>ssh</code> も通ります。"],
+          ],
+        },
+        {
+          title: "開発ツール (git / Python)",
+          intro: "ブラウザの中の Linux で、本物の git と Python が動きます。クローンも HTTP 取得もネット越しにそのまま使えます。",
+          cmds: [
+            ["git --version", "git のバージョン"],
+            ["python3 --version", "Python のバージョン"],
+            ["python3 -c 'print(sum(range(101)))'", "Python でその場計算 (1..100 の合計)"],
+            ["git clone --depth 1 https://github.com/octocat/Hello-World.git /tmp/hw", "GitHub から浅いクローン (HTTPS)"],
+            ["ls -la /tmp/hw && cat /tmp/hw/README", "クローン結果を確認"],
+            ["python3 -c 'import urllib.request as u; print(u.urlopen(\"https://api.github.com/zen\").read().decode())'", "Python の標準ライブラリで HTTPS GET"],
+            ["printf 'for i in range(5):\\n    print(i, i*i)\\n' > /tmp/app.py", "サンプル Python スクリプトを作成"],
+            ["nano /tmp/app.py", "nano で編集 (Ctrl+O→Enter で保存 / Ctrl+X で終了)"],
+            ["python3 /tmp/app.py", "編集したスクリプトを実行"],
+          ],
+          details: [
+            ["コンテナに後から入れる / 最初から入れる",
+             "実は <code>apk add git python3</code> でも導入できますが、このイメージでは <b>Dockerfile に git・python3 を同梱</b>済みなので最初から使えます。<code>apk add</code> は実行時に追加したいときに便利です。"],
+            ["git clone もブラウザの中から",
+             "<code>git clone https://…</code> は HTTPS で GitHub に接続します。c2w-net が TCP をそのまま通すので、ホストの git と同じようにクローンできます (大きなリポジトリは時間がかかります)。"],
+            ["Python からネットを叩く",
+             "<code>urllib.request</code> は openssl + <code>/etc/ssl/certs</code> の CA で TLS 検証します。<code>requests</code> を使いたい場合は <code>python3 -m ensurepip &amp;&amp; pip install requests</code> 等で追加できます (ネット必須)。"],
+            ["nano での編集について",
+             "<code>nano</code> は対話エディタなので、実行するとターミナルが編集画面になります。そのまま入力して <b>Ctrl+O → Enter</b> で保存、<b>Ctrl+X</b> で終了。終了するとプロンプトに戻り、ボタンのロックも解除されます (抜けられない時は右上の「中断」ボタン)。"],
+          ],
+        },
+      ];
+
+      let currentChapter = 0;
+      const chapterBadge = document.getElementById("chapter-badge");
+      const chapterTitle = document.getElementById("chapter-title");
+      const chapterIntro = document.getElementById("chapter-intro");
+      const chapterBodyEl = document.getElementById("chapter-body");
+      const navPrev = document.getElementById("nav-prev");
+      const navNext = document.getElementById("nav-next");
+
+      function escapeHtml(s) {
+        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function renderChapter(idx) {
+        const ch = CHAPTERS[idx];
+        chapterBadge.textContent = "第 " + (idx + 1) + " 章 / 全 " + CHAPTERS.length + " 章";
+        chapterTitle.textContent = ch.title;
+        chapterIntro.textContent = ch.intro;
+        chapterBodyEl.innerHTML =
+          '<ul class="cmd-list">' +
+          ch.cmds.map(([cmd, desc]) =>
+            '<li><div class="cmd-main">' +
+            '<div class="code-wrap">' +
+            '<code title="' + escapeHtml(cmd) + '">' + escapeHtml(cmd) + '</code>' +
+            '<button class="copy-btn" data-copy="' + escapeHtml(cmd) + '" title="コマンドをコピー" aria-label="コマンドをコピー">' + COPY_ICON + '</button>' +
+            '</div>' +
+            '<button data-cmd="' + escapeHtml(cmd) + '">▶ 実行</button></div>' +
+            '<span class="desc">' + escapeHtml(desc) + '</span></li>'
+          ).join("") +
+          "</ul>";
+        // チャプター連動の詳細解説 (details は信頼済み著者文字列なので HTML をそのまま使う)
+        const notes = ch.details || [];
+        document.getElementById("chapter-notes-head").style.display = notes.length ? "" : "none";
+        document.getElementById("chapter-notes").innerHTML = notes.map(([t, body]) =>
+          '<details class="accordion"><summary>' + escapeHtml(t) + '</summary>' +
+          '<div class="body">' + body + "</div></details>"
+        ).join("");
+        navPrev.disabled = idx === 0;
+        navNext.disabled = idx === CHAPTERS.length - 1;
+        refreshButtons();
+      }
+      navPrev.addEventListener("click", () => { if (currentChapter > 0) renderChapter(--currentChapter); });
+      navNext.addEventListener("click", () => { if (currentChapter < CHAPTERS.length - 1) renderChapter(++currentChapter); });
+      renderChapter(0);
+
+      // 最初のカーネル出力が出たらメッセージを「起動中」に切り替える
+      xterm.onLineFeed(() => {
+        if (!sawOutput) {
+          sawOutput = true;
+          bootTitleEl.textContent = "Linux カーネルを起動中…";
+          bootMsgEl.innerHTML = "RISC-V 上で Alpine Linux がブートしています。<br>シェルが立ち上がるまでお待ちください。";
+        }
+      });
+
+      // シェルプロンプト (busybox の "/ #" 等) を検出して準備完了とみなす。
+      // 起動直後はプロンプトがビューポート途中の行に出る (下は空行) ため、
+      // 末尾数行だけでなく「カーソル行」を直接見るのが確実。保険でバッファ全体も走査。
+      const PROMPT_RE = /[#$]\s*$/;
+      const promptTimer = setInterval(() => {
+        const buf = xterm.buffer.active;
+        // 1) カーソル行を最優先で判定
+        const cur = buf.getLine(buf.baseY + buf.cursorY);
+        if (cur && PROMPT_RE.test(cur.translateToString(true))) {
+          clearInterval(promptTimer); markReady(); return;
+        }
+        // 2) フォールバック: 可視範囲の非空行を下から走査
+        for (let i = buf.length - 1; i >= 0 && i > buf.length - 40; i--) {
+          const line = buf.getLine(i);
+          if (!line) continue;
+          const s = line.translateToString(true);
+          if (s && PROMPT_RE.test(s)) { clearInterval(promptTimer); markReady(); return; }
+        }
+      }, 400);
+
+      // 保険: 一定時間で必ずオーバーレイを解除 (検出漏れ対策)
+      setTimeout(() => { clearInterval(promptTimer); markReady(); }, PROMPT_TIMEOUT_MS);
 
       function getNetParam() {
         var vars = location.search.substring(1).split("&");
@@ -320,8 +673,21 @@
             return { mode: kv[1], param: kv[2] };
           }
         }
-        // PoC: URL クエリが空でも c2w-net (ws://localhost:8888) に繋ぐ
-        return { mode: "delegate", param: "ws://localhost:8888" };
+        // URL クエリが空のときのデフォルト接続先。
+        // - ローカル開発 (serve.mjs, localhost) は従来通り ws://localhost:8888
+        // - それ以外 (nginx 配信 / Cloudflare Tunnel) はページと同一オリジンの /ws
+        //   (nginx が /ws を c2w-net:8888 へリバースプロキシ、https なら wss に昇格)
+        return { mode: "delegate", param: defaultWsUrl() };
+      }
+
+      // デフォルトの WebSocket 接続先を決める (同一オリジン化)
+      function defaultWsUrl() {
+        var host = location.hostname;
+        if (host === "localhost" || host === "127.0.0.1") {
+          return "ws://localhost:8888";
+        }
+        var wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+        return wsProto + "//" + location.host + "/ws";
       }
     </script>
   </body>
