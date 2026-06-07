@@ -436,6 +436,22 @@
         statusEl.textContent = "● 実行中";
         statusEl.classList.add("ready");
         refreshButtons();
+        startKeepAlive();
+      }
+
+      // ===== 接続維持 (keepalive) =====
+      // アイドルだと前段 (Cloudflare Tunnel 等) が WebSocket を idle timeout で切る。
+      // 切れても ws-delegate.js が透過的に再接続するが、そもそも切られないよう、
+      // ゲストから低頻度でゲートウェイへ ICMP を流して L2 トラフィックを絶やさない。
+      // バックグラウンド実行 + clear で端末表示はクリーンに保つ。
+      let keepAliveStarted = false;
+      function startKeepAlive() {
+        if (keepAliveStarted) return;
+        keepAliveStarted = true;
+        setTimeout(() => {
+          // -i 15: 15 秒間隔。出力は捨て、ジョブはバックグラウンドへ。最後に画面を消す。
+          xterm.paste("ping -i 15 192.168.127.1 >/dev/null 2>&1 & clear\n");
+        }, 800);
       }
 
       // ===== チャプター (とほほの Linux 入門を参考に、本環境で動作確認済みのコマンドだけ) =====
